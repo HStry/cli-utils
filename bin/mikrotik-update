@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+
+# mikrotik-update - Update packages and routerboard over ssh
+# Copyright (c) 2025 - Hans Strijker
+# Licensed under LGPL-3.0
+
+################################################################################
+#                                                                              #
+# Clear parameters to use, and parse commandline arguments                     #
+#                                                                              #
+################################################################################
+
+help=0
+
+parse_args=1
+active_arg=''
+
+for arg in "$@"; do
+  grep -q -- '^\(--help\|-[h?]\)$' <<< "${arg}" && help=1
+done
+
+if (( help )); then
+cat << EOF >&2
+mikrotik-update [SSH-OPTIONS] HOST
+EOF
+exit
+fi
+
+################################################################################
+#                                                                              #
+# declare functions                                                            #
+#                                                                              #
+################################################################################
+
+_join_cmds() {
+  local cmd first=1
+  for cmd in "$@"; do
+    (( first )) && first=0 || echo -n ' '
+    echo -n "${cmd};"
+  done
+}
+
+update_check() {
+  local status cmd
+  cmd="$(_join_cmds '/system/package/update/check-for-updates' \
+                    '/system/routerboard/print' )"
+  if ! status="$(ssh "$@" "${cmd}" 2> /dev/null)"; then
+    echo "Could not reach host, or host is not a Mikrotik device" >&2
+    return 1
+  fi
+  local software_current software_latest
+  local firmware_current firmware_latest
+  software_current="$(grep -m1 '^\s*installed-version' <<< "${status}" \
+                      | sed -e 's/^[^:]*:\s*//' -e 's/\s*$//' )"
+  software_latest="$(grep -m1 '^\s*latest-version' <<< "${status}" \
+                     | sed -e 's/^[^:]*:\s*//' -e 's/\s*$//' )"
+  firmware_current="$(grep -m1 '^\s*current-firmware' <<< "${status}" \
+                      | sed -e 's/^[^:]*:\s*//' -e 's/\s*$//' )"
+  firmware_latest="$(grep -m1 '^\s*upgrade-firmware' <<< "${status}" \
+                     | sed -e 's/^[^:]*:\s*//' -e 's/\s*$//' )"
+  local u=0 n_ n=0
+  for n_ in "${#software_current}" "${#software_latest}" \
+            "${#firmware_current}" "${#firmware_latest}"; do
+    (( n_ > n )) && n=${n_}
+  done
+  
+  printf "software: %${n}s" "${software_current}"
+  if [[ "${software_current}" != "${software_latest}" ]]; then
+    printf ' -> '"%${n}s\n" "${software_latest}" && u=1
+  else
+    printf '\n'
+  fi
+  
+  printf "firmware: %${n}s" "${firmware_current}"
+  if [[ "${firmware_current}" != "${firmware_latest}" ]]; then
+    printf ' -> '"%${n}s\n" "${firmware_latest}" && u=1
+  else
+    printf '\n'
+  fi
+  
+  (( u )) && return 0 || return 1
+}
+
+
+################################################################################
+#                                                                              #
+# Do the thing!                                                                #
+#                                                                              #
+################################################################################
