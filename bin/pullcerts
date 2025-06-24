@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+
+if [ $# -eq 0 ]; then
+  cat << EOF >&2
+USAGE:
+  pullcerts HOSTNAME [SERVER] [PORT]
+EOF
+  exit
+fi
+hostname="${1}"
+server="${2:-${hostname}}"
+port="${3:-443}"
+if echo "${server}" | grep -q '^\(0\|[1-9][0-9]*\)$'; then
+  port="${server}"
+  server="${hostname}"
+fi
+
+
+openssl="$(type -P openssl)"
+if [ -z "${openssl}" ]; then
+  echo "Missing required 'openssl' command." >&2
+  exit 1
+fi
+
+raw_chain="$(openssl s_client \
+               -showcerts \
+               -servername "${hostname}" \
+               -connect "${server}:${port}" \
+             < /dev/null)"
+
+n=$(( ($(echo "${raw_chain}" \
+         | grep -c '^-----\(BEGIN\|END\) ') + 1) / 2))
+(( ${n} < 10 )) && n=10
+
+fmt='%s_%0'"${#n}"'d-%s'
+i=1
+
+while echo "${raw_chain}" | grep -q '^-----BEGIN '; do
+  ln_begin="$(echo "${raw_chain}" \
+              | grep -nm1 '^-----BEGIN ' \
+              | awk -F: '{print $1}')"
+  ln_end="$(echo "${raw_chain}" \
+            | grep -nm1 '^-----END ' \
+            | awk -F: '{print $1}')"
+  pem="$(echo "${raw_chain}" | sed -e "${ln_begin},${ln_end}"'!d')"
+  raw_chain="$(echo "${raw_chain}" | tail -n +$(( ${ln_end} + 1 )))"
+  type="$(echo "${pem}" \
+          | head -n 1 \
+          | sed -e 's/^[^ ]\+\s*//' \
+                -e 's/-*$//' \
+                -e 's/\s\+/-/g' \
+          | tr '[:upper:]' '[:lower:]')"
+  filename="$(printf "${fmt}" "${hostname}" "${i}" "${type}")"
+  echo "${pem}" > "${filename}.pem"
+  case "${type}" in
+    'certificate') echo "${pem}" \
+                   | "${openssl}" x509 -text -noout \
+                   > "${filename}.txt";;
+  esac
+  i="$(( $i + 1 ))"
+done
