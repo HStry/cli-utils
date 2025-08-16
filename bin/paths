@@ -68,7 +68,7 @@ main() {
   set_placeholders
   set_config
   
-  paths="$(split "${1:-${PATH}}")"
+  paths="$(split "${1}")"
   if istrue "${resolve}"; then
     paths="$(resolve "${paths}")"
   elif istrue "${absolute}"; then
@@ -95,4 +95,4 @@ main() {
   fi
 }
 
-main
+main "${1:-${PATH}}"
