@@ -1,0 +1,98 @@
+#!/usr/bin/env sh
+
+istrue() (
+  [ -z "${1}" ] && exit 1
+  if echo "${1}" | grep -q '^\(0\|\(- \?\)\?[1-9][0-9]*\)$'; then
+    [ ${1} -gt 0 ] && exit 0 || exit 1
+  fi
+  echo 'TRUE\nYES\n' | grep -qi "^${1}.*\$"
+)
+
+hasline() (
+  m="$(echo "${1}" | grep -F "${2}")"
+  [ "${m}" = "${2}" ]
+)
+
+split() (
+  path="$(echo "${1}" \
+          | sed -e "s/\\\\\\\\/${ebs}/g" \
+                -e "s/\\\\:/${ecn}/g" \
+                -e "s/\\\'/${esq}/g" \
+                -e "s/\\\\\"/${edq}/g")"
+  _path=''
+  while [ "${path}" != "${_path}" ]; do
+    _path="${path}"
+    path="$(echo "${path}" \
+            | sed -e "s/'\([^\']*\):\([^\']*\)'/'\1${icn}\2'/g" \
+                  -e "s/\"\([^\"]*\):\([^\"]*\)\"/\"\1${icn}\2\"/g")"
+  done
+  echo "${path}" \
+  | sed -e 's/:/\n/g' \
+        -e "s/${icn}/:/g" \
+        -e "s/${edq}/\\\\\"/g" \
+        -e "s/${esq}/\\\'/g" \
+        -e "s/${ecn}/\\\\:/g" \
+        -e "s/${ebs}/\\\\\\\\/g"
+)
+
+resolve() (
+  echo "${1}" \
+  | while IFS= read p; do
+      realpath -m "${p}"
+    done
+)
+
+absolute() (
+  echo "${1}" \
+  | while IFS= read p; do
+      realpath -s "${p}"
+    done
+)
+
+set_placeholders() {
+  ebs="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)"
+  ecn="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)"
+  esq="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)"
+  edq="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)"
+  icn="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)"
+}
+
+set_config() {
+  istrue "${no_resolve}"  && resolve=0  || resolve=1
+  istrue "${no_absolute}" && absolute=0 || absolute=1
+  istrue "${no_unique}"   && unique=0   || unique=1
+  istrue "${no_sort}"     && sort=0     || sort=1
+}
+
+main() {
+  set_placeholders
+  set_config
+  
+  paths="$(split "${1:-${PATH}}")"
+  if istrue "${resolve}"; then
+    paths="$(resolve "${paths}")"
+  elif istrue "${absolute}"; then
+    paths="$(absolute "${paths}")"
+  fi
+  
+  if istrue "${sort}" && istrue "${unique}"; then
+    echo "${paths}" | sort -u
+  elif istrue "${sort}"; then
+    echo "${paths}" | sort
+  elif istrue "${unique}"; then
+    dups="$(echo "${paths}" | sort | uniq -d)"
+    dupx=''
+    echo "${paths}" \
+    | while IFS= read p; do
+        if hasline "${dups}" "${p}"; then
+          hasline "${dupx}" "${p}" && continue
+          dupx="${dupx}${p}"'\n'
+        fi
+        echo "${p}"
+      done
+  else
+    echo "${paths}"
+  fi
+}
+
+main
