@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+
+. "%%LIBRARY_ROOT%%/cli-common.sh"
