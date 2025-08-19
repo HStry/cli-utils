@@ -1,3 +1,25 @@
 #!/usr/bin/env sh
 
 . "%%LIBRARY_ROOT%%/cli-common.sh"
+
+cmd_touch="$(/usr/bin/env which touch)"
+cmd_chown="$(/usr/bin/env which chown)"
+cmd_chgrp="$(/usr/bin/env which chgrp)"
+cmd_chmod="$(/usr/bin/env which chmod)"
+
+_xtouch() (
+  touch "$@"
+  if [ -n "${owner}" ]; then
+    chown "${owner}" "$@"
+  fi
+  if [ -n "${group}" ]; then
+    chgrp "${group}" "$@"
+  fi
+  if [ -n "${mode}" ]; then
+    chmod "${mode}" "$@"
+  elif [ -n "${mode_reference}" ]; then
+    chmod --reference="${mode_reference}" "$@"
+  fi
+)
+
+
