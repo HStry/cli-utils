@@ -1,4 +1,4 @@
-#!/usr/bin/sh
+#!/usr/bin/env sh
 
 _self="$(realpath -s "$0" 2>/dev/null || realpath "$0")" # F* busybox.
 _path="$(dirname "${_self}")"
