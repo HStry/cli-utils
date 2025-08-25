@@ -20,7 +20,7 @@ lsmnt() (
   oc="$({ echo 'OPTIONS';
           echo "${mnts}" | awk -F "${TAB}" '{print $4}'; } | wc -L)"
   
-  local pfmt="%-${dc}s  %-${mc}s  %-${tc}s  %s\n"
+  pfmt="%-${dc}s  %-${mc}s  %-${tc}s  %s\n"
   printf "${pfmt}" 'DEVICE' 'MOUNTPOINT' 'TYPE' 'OPTIONS'
   echo "${mnts}" \
   | while read line; do
