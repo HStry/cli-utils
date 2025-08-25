@@ -1,31 +1,33 @@
-lsmnt() {
-  local sort=${LSMNT_SORT:-d}
-  local mptn='^\(.*\) on \(.*\) type \([^ ]*\) (\(.*\))$'
-  local sptn='\1\t\2\t\3\t\4'
-  local mnts="$(mount | sed -e "s/${mptn}/${sptn}/")"
+lsmnt() (
+  TAB="$(printf '\t')"  # sh requires '\t'; bash requires $'\t'. This works for both.
+  sort="${LSMNT_SORT:-d}"
+  mptn='^\(.*\) on \(.*\) type \([^ ]*\) (\(.*\))$'
+  sptn='\1'"${TAB}"'\2'"${TAB}"'\3'"${TAB}"'\4'
+  mnts="$(mount | sed -e "s/${mptn}/${sptn}/")"
   case "${sort}" in
-    d) mnts="$(sort -t$'\t' -k1,2 <<< "${mnts}")";;
-    m) mnts="$(sort -t$'\t' -k2,3 <<< "${mnts}")";;
-    t) mnts="$(sort -t$'\t' -k3,4 <<< "${mnts}")";;
-    o) mnts="$(sort -t$'\t' -k4   <<< "${mnts}")";;
+    d) mnts="$(echo "${mnts}" | sort -t "${TAB}" -k1,2)";;
+    m) mnts="$(echo "${mnts}" | sort -t "${TAB}" -k2,3)";;
+    t) mnts="$(echo "${mnts}" | sort -t "${TAB}" -k3,4)";;
+    o) mnts="$(echo "${mnts}" | sort -t "${TAB}" -k4)";;
   esac
-  local d dc m mc t tc o oc
+  
   dc="$({ echo 'DEVICE';
-          awk -F'\t' '{print $1}' <<< "${mnts}"; } | wc -L)"
+          echo "${mnts}" | awk -F "${TAB}" '{print $1}'; } | wc -L)"
   mc="$({ echo 'MOUNTPOINT';
-          awk -F'\t' '{print $2}' <<< "${mnts}"; } | wc -L)"
+          echo "${mnts}" | awk -F "${TAB}" '{print $2}'; } | wc -L)"
   tc="$({ echo 'TYPE';
-          awk -F'\t' '{print $3}' <<< "${mnts}"; } | wc -L)"
+          echo "${mnts}" | awk -F "${TAB}" '{print $3}'; } | wc -L)"
   oc="$({ echo 'OPTIONS';
-          awk -F'\t' '{print $4}' <<< "${mnts}"; } | wc -L)"
+          echo "${mnts}" | awk -F "${TAB}" '{print $4}'; } | wc -L)"
   
   local pfmt="%-${dc}s  %-${mc}s  %-${tc}s  %s\n"
   printf "${pfmt}" 'DEVICE' 'MOUNTPOINT' 'TYPE' 'OPTIONS'
-  while read line; do
-    printf "${pfmt}" \
-      "$(awk -F'\t' '{print $1}' <<< "${line}")" \
-      "$(awk -F'\t' '{print $2}' <<< "${line}")" \
-      "$(awk -F'\t' '{print $3}' <<< "${line}")" \
-      "$(awk -F'\t' '{print $4}' <<< "${line}")"
-  done <<< "${mnts}"
-}
+  echo "${mnts}" \
+  | while read line; do
+      printf "${pfmt}" \
+        "$(echo "${line}" | awk -F "${TAB}" '{print $1}')" \
+        "$(echo "${line}" | awk -F "${TAB}" '{print $2}')" \
+        "$(echo "${line}" | awk -F "${TAB}" '{print $3}')" \
+        "$(echo "${line}" | awk -F "${TAB}" '{print $4}')"
+    done
+)
