@@ -1,0 +1,114 @@
+#!/usr/bin/env sh
+
+ts() {
+  if [ -z "${datefmt}" ]; then
+    case "${dateprc}" in
+      'd'|'date') ;;
+      'h'|'hours') ;;
+      'm'|'minutes'|
+      's'|'seconds'|
+      'ns'|'nanoseconds') ;;
+      'ms'|'milliseconds') ;;
+      'μs'|'us'|'microseconds') ;;
+      
+    esac
+  else
+  fi
+}
+
+help=0
+list=0
+keep_extension=0
+localtime=0
+method='copy'
+datefmt=''
+dateprc='s'
+destination=''
+sources=''
+
+parse_args=1
+active_arg=''
+
+for arg in "$@"; do
+  [ $parse_args -gt 0 -a "${arg}" = '--' ] && parse_args=0 && continue
+  [ $parse_args -eq 0 -a "${arg}" = '++' ] && parse_args=1 && continue
+  [ $parse_args -gt 0 ] && echo "${arg}" | grep -q '^--' \
+  && case "${arg}" in
+    '--help')           help=1;;
+    '--list')           list=1;;
+    '--keep-extension') keep_extension=1;;
+    '--localtime')      localtime=1;;
+    '--copy')           method='copy';;
+    '--move')           method='move';;
+    '--purge')          method='purge';;
+    '--datefmt')        active_arg='datefmt';;
+    '--precision')      active_arg='dateprc';;
+    '--destination')    active_arg='destination';;
+    *) echo "Argument '${arg}' not recognized." >&2;
+       exit 1;;
+  esac && continue
+  [ $parse_args -gt 0 ] && echo "${arg}" | grep -q '^-[a-zA-Z0-9]\+' \
+  && for a in $(echo "${arg}" | sed -e 's/\(.\)/ \1/g' -e 's/^[ -]*//'); do
+    case "${a}" in
+      'h'|'?') help=1;;
+      'l')     list=1;;
+      'e')     keep_extension=1;;
+      'c')     method='copy';;
+      'm')     method='move';;
+      'f')     active_arg='datefmt';;
+      'p')     active_arg='dateprc';;
+      'd')     active_arg='destination';;
+      *) echo "Argument '-${a}' not recognized." >&2;
+         exit 1;;
+    esac
+  done && continue
+  [ $parse_args -gt 0 ] && echo "${arg}" | grep -q '^-' \
+  && echo "Argument '${arg}' not recognized." >&2 && exit 1
+  
+  case "${active_arg}" in
+    'datefmt') ;;
+    'dateprc') ;;
+    'destination') ;;
+    *) echo "Coding error - unhandled active argument '${active_arg}'" >&2;
+       exit 1;;
+  esac
+done
+
+if [ $help -gt 0 ]; then
+  cat << EOF >&2
+PathPark - Quickly "backup" a file or directory.
+usage:
+  pp [OPTIONS] [PATH...]
+
+OPTIONS:
+  -h, -?, --help         Print this help text.
+  -l, --list             List parked variants.
+  -e, --keep-extension   Move the timestamp before the file extension.
+  -c, --copy             Copy (-ar) path to its destination (default action).
+  -m, --move             Move path to its destination.
+      --purge            Copy, then purge source.
+  -f, --datefmt FMT      
+  -p, --precision PREC   
+      --localtime        Use local (computer) time instead of UTC.
+  -d, --destination DIR  Copy/Move to specified destination directory.
+
+EXAMPLES:
+  pp 
+EOF
+fi
+
+echo "${sources}" \
+| sed -e 's/^;\s*//' -e 's/;\s*/\n/g' \
+| while read src; do
+  if ! [ -e "${src}" ]; do
+    echo "Path object '${src}' seemingly does not exist." >&2
+    exit 1
+  elif ! [ -f "${src}" -o -d "${src}" ]; do
+    echo "Path object '${src}' is not a file or directory." >&2
+    exit 1
+  elif [ -h "${src}" ]; do
+    echo "Path object '${src}' is a symlink." >&2
+    exit 1
+  done
+  
+done
