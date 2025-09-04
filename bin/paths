@@ -1,0 +1,64 @@
+#!/usr/bin/env sh
+
+help_msg="$(cat << EOF
+USAGE:
+  ${_file} [OPTIONS] [PATH|PATH_ARRAY...]
+
+OPTIONS:
+  -h, --help          Show this help message
+  -a, --absolute      Make path(s) absolute
+  -r, --resolve       Resolve path(s)
+  -n, --normalize     Normalize path(s)
+  -d, --dedup         Remove duplicate entries from path array
+  -p, --purge         Remove non-existing entries from path array
+  -s, --sort          Sort entries (alphabetically)
+  -x, --split         Split path into its elements
+  -X, --split-array   Split paths out of array
+  -j, --join          Join path elements into path
+  -J, --join-array    Join paths into array
+
+PATH:
+
+PATH_ARRAY:
+  If provided, use colon-separated (PATH-style) arrays of paths. If left empty,
+  the value of \$PATH will be used.
+
+EXAMPLES:
+  Prepend userhome bin directory to PATH, resolve symlinks, and filter out
+  duplicate entries.
+  \$ ${_file} -Jdr "${USER}/.local/bin" "${PATH}"
+
+EOF
+)"
+
+path_absolute() ()
+path_normalize() ()
+path_resolve() ()
+path_relative_to() ()
+path_split() ()
+path_join() ()
+
+
+path_array_split() (
+)
+
+path_array_join() (
+  for p in "$@"; do
+    echo "${p}" \
+    | while IFS= read el; do
+      el="$(echo "${el}" \
+            | sed -e 's/^\s*\(:\+\s*\)\?//' \
+                  -e 's/\(:\+\s*\)\?\s*$//')"
+      [ -n "${el}" ] && echo -n ":${el}"
+    done
+  done \
+  | sed -e 's/^://'
+)
+
+set_placeholders() {
+  ebs="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)"
+  ecn="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)"
+  esq="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)"
+  edq="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)"
+  icn="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)"
+}
