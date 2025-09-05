@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+
+# yeah, it's slow, but it works.
+
+for ptn in "$@"; do
+  echo "${PATH}" \
+  | sed -e 's/:/\n/g' \
+  | sed -e 's/^\s*//' -e 's/\s*$//' \
+  | grep -v '^$' \
+  | while read d; do
+      d="$(echo "${d}" | sed -e 's/\/*$//')"
+      [ -d "${d:-/}" ] || continue
+      for f in "${d}/"*; do
+        [ -f "${f}" ] || continue
+        [ -x "${f}" ] || continue
+        echo "${f##*/}" | grep -q "${ptn}" && echo "${f}"
+      done
+    done
+done
