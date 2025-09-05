@@ -31,11 +31,26 @@ EXAMPLES:
 EOF
 )"
 
-path_absolute() ()
-path_normalize() ()
-path_resolve() ()
-path_relative_to() ()
-path_split() ()
+path_absolute() (
+  # TODO
+)
+
+path_normalize() (
+  # TODO
+)
+
+path_resolve() (
+  # TODO
+)
+
+path_relative_to() (
+  # TODO
+)
+
+path_split() (
+  # TODO
+)
+
 path_join() (
   [ "${1}" = '/' ] && echo -n '/' && shift
   for p in "$@"; do
