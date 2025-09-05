@@ -36,10 +36,40 @@ path_normalize() ()
 path_resolve() ()
 path_relative_to() ()
 path_split() ()
-path_join() ()
-
+path_join() (
+  [ "${1}" = '/' ] && echo -n '/' && shift
+  for p in "$@"; do
+    echo "${p}" \
+    | while IFS= read el; do
+      el="$(echo "${el}" \
+            | sed -e 's/^\s*\(\/\+\s*\)\?//' \
+                  -e 's/\(\/\+\s*\)\?\s*$//')"
+      [ -n "${el}" ] && echo -n "\/${el}"
+    done
+  done \
+  | sed -e 's/^\///'
+)
 
 path_array_split() (
+  path_array="$(echo "${1}" \
+                | sed -e "s/\\\\\\\\/${ebs}/g" \
+                      -e "s/\\\\:/${ecn}/g" \
+                      -e "s/\\\'/${esq}/g" \
+                      -e "s/\\\\\"/${edq}/g")"
+  _path_array=''
+  while [ "${path_array}" != "${_path_array}" ]; do
+    _path_array="${path_array}"
+    path_array="$(echo "${path_array}" \
+                  | sed -e "s/'\([^\']*\):\([^\']*\)'/'\1${icn}\2'/g" \
+                        -e "s/\"\([^\"]*\):\([^\"]*\)\"/\"\1${icn}\2\"/g")"
+  done
+  echo "${path_array}" \
+  | sed -e 's/:/\n/g' \
+        -e "s/${icn}/:/g" \
+        -e "s/${edq}/\\\\\"/g" \
+        -e "s/${esq}/\\\'/g" \
+        -e "s/${ecn}/\\\\:/g" \
+        -e "s/${ebs}/\\\\\\\\/g"
 )
 
 path_array_join() (
