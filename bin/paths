@@ -107,3 +107,23 @@ set_placeholders() {
   edq="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)"
   icn="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)"
 }
+
+set_identity() {
+  _self="$(path_absolute "${1}")"
+  _path="${_self%/*}"
+  _file="${_self##*/}"
+  _name="${_file%.*}"
+}
+
+parse_args() {
+  # TODO
+}
+
+main() (
+  # TODO
+)
+
+set_identity "$0" || exit $?
+set_placeholders || exit $?
+parse_args "$@" || exit $?
+main || exit $?
