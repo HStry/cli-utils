@@ -1,6 +1,19 @@
 # Source me!
 
-_li_sep=
+_wc() (
+  fmt='lines=%d\nchars=%d\n'
+  if [ -z "${1}" ]; then
+    lines=0
+    chars=0
+  else
+    . <(echo "${1}" \
+        | wc -lm \
+        | sed -e 's/^\s*/lines=/' \
+              -e 's/\s\+/\nchars=/' \
+              -e 's/\s*$//')
+  fi
+  printf "${fmt}" "${lines}" "${chars}"
+)
 
 isint() (
   [ -n "${1}" ] && echo "$1" | grep -q '^\(0\|-\?[1-9][0-9]*\)$'
@@ -27,6 +40,46 @@ istrue() (
 isfalse() (
   b="$(tobool "${1}")" && [ "${b}" = 'false' ]
 )
+
+_li_init() {
+  [ -n "${_LI_SEP}" ] && return 0
+  _LI_SEP="$(cat /dev/urandom \
+             | LC_ALL=C tr -dc '[:alnum:]' \
+             | head -c 24)"
+}
+_li_initialized() (
+  if [ -z "${_LI_SEP}" ]; then
+    echo "list function not initialized - run '_li_init'." >&2
+    exit 1
+  fi
+)
+
+li_add() (
+  _li_initialized || exit $?
+  for el in "$@"; do
+    [ "$(echo "${el}" | head -n 1)" = "${_LI_SEP}" ] || echo "${_LI_SEP}"
+    echo "${el}"
+  done
+)
+
+li_index() (
+  _li_initialized || exit $?
+)
+
+li_del() (
+  _li_initialized || exit $?
+)
+
+li_slice() (
+  _li_initialized || exit $?
+)
+
+
+
+
+
+
+
 
 li_add() (
   [ -n "${1}" ] && echo "${1}"; shift
