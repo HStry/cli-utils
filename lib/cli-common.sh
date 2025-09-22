@@ -47,24 +47,72 @@ _li_init() {
              | LC_ALL=C tr -dc '[:alnum:]' \
              | head -c 24)"
 }
+
+__li_initialized() (
+  [ -n "${_LI_SEP}" ] || exit 1
+  [ ${#_LI_SEP} -ge 12 ] || exit 2
+  [ "$(echo "${_LI_SEP}" | LC_ALL=C tr -dc '[:alnum:]')" = "${_LI_SEP}" ] || exit 3
+)
 _li_initialized() (
-  if [ -z "${_LI_SEP}" ]; then
-    echo "list function not initialized - run '_li_init'." >&2
+  __li_initialized && exit 0 || ec=$?
+  case $ec in
+    1) echo "list function not initialized - run '_li_init'." >&2;;
+    2) echo "list separator is too short." >&2;;
+    3) echo "list separator contains non-alphanumeric characters." >&2;;
+  esac
+  exit $ec
+)
+
+__li_identify() (
+  _li_initialized || exit $?
+  [ -n "${1}" ] || exit 1
+  [ ]
+)
+
+_li_identify() (
+  if ! [ "$(echo "${1}" | head -n 1)" = "${_LI_SEP}" ]; then
+    echo "Object provided is not a list." >&2
     exit 1
   fi
+)
+
+li_len() (
+  _li_initialized || exit $?
+  _li_identify "${1}" || exit $?
+  echo "${1}" | grep -c "^${_LI_SEP}\$"
 )
 
 li_add() (
   _li_initialized || exit $?
   for el in "$@"; do
-    [ "$(echo "${el}" | head -n 1)" = "${_LI_SEP}" ] || echo "${_LI_SEP}"
+    _li_identify "${el}" 2> /dev/null || echo "${_LI_SEP}"
     echo "${el}"
   done
 )
 
-li_index() (
-  _li_initialized || exit $?
+_li_normalize_index() (
+  
+
 )
+
+li_index() (
+  _len=$(li_len "$1") || exit $?
+  if [ ${2} -ge ${_len} ] || [ $(( ${_len} + ${n} )) -lt 0 ]; then
+    echo "Index '${2}' not available in list." >&2
+    exit 1
+  fi
+  [ ${2} -lt 0 ] && n="$(( ${_len} - ${n} ))" || n="${2}"
+  
+)
+
+li_iter() (
+  _li_initialized || exit $?
+  _li_identify "${1}" || exit $?
+  li="${1}"
+  while [ $(echo "${li}" | grep ) -ge 2 ]
+  
+)
+
 
 li_del() (
   _li_initialized || exit $?
@@ -76,42 +124,6 @@ li_slice() (
 
 
 
-
-
-
-
-
-li_add() (
-  [ -n "${1}" ] && echo "${1}"; shift
-  for a in "$@"; do
-    echo "${_li_sep}${2}"
-  done
-)
-
-li_len() (
-  echo "${1}" | grep -c "^${_li_sep}"
-)
-
-li_item() (
-  if ! isnum "${2}"; then
-    echo "Provided index is not numeric." >&2
-    exit 1
-  fi
-  len=$(li_len
-  isnum "${2}" || exit 1
-  [ ${2} -lt $(li_len "${1}") ] || exit 1
-  linenums="$(echo "${1}" | grep -n "^${_li_sep}" \
-              | tail -n +$(( ${2} + 1 )) | head -n 2 \
-              | awk -F: '{print $1}')"
-  a=$(echo "${linenums}" | head -n 1)
-  b=$(( $(echo "${linenums}" | head -n 1)"
-  n="${2}"
-)
-
-li_iter() (
-  li="${1}"
-  
-)
 
 
 
