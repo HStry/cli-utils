@@ -2,7 +2,7 @@ userapp_etc() (
   if [ -z "${1}" ]; then
     echo "Missing application name argument." >&2
     exit 255
-  elif ! echo "${1}" | grep -q '^[a-zA-Z0-9]\+\([._-][a-zA-Z0-9]\+\)*+$'; then
+  elif ! echo "${1}" | grep -q '^[a-zA-Z0-9]\+\([._-][a-zA-Z0-9]\+\)*$'; then
     echo "Application name '${1}' is not path-safe." >&2
     exit 127
   fi
