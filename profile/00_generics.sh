@@ -14,3 +14,4 @@ userapp_etc() (
   exit 1
 )
 
+export -f userapp_etc
