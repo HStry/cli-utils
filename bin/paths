@@ -51,6 +51,31 @@ path_split() (
   # TODO
 )
 
+paths_common() (
+  dups() (
+    for s in "$@"; do echo "${s}"; done | sort | uniq -d
+  )
+  findrel() (
+    d="$(realpath "${1}")"
+    find "${d}" \
+    | while IFS= read line; do
+        [ "${line#${d}}" = "${line}" ] && echo "Something went wrong with '${line}'" >&2
+        printf '+/%s\n' "$(echo "${line#${d}}" | sed 's/^\///')"
+      done
+  )
+  objects_common=''
+  for d in "$@"; do
+    if ! [ -d "${d}" ]; then
+      echo "Object '${d}' is not a directory - skipping." >&2
+      continue
+    fi
+    objects="$(findrel "${d}")"
+    [ -z "${objects_common}" ] && objects_common="${objects}" && continue
+    objects_common="$(dups "${objects_common}" "${objects}")"
+  done
+  echo "${objects_common}"
+)
+
 path_join() (
   [ "${1}" = '/' ] && echo -n '/' && shift
   for p in "$@"; do
