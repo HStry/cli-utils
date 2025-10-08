@@ -51,7 +51,9 @@ path_split() (
   # TODO
 )
 
+
 paths_common() (
+  lang=C.UTF-8
   dups() (
     for s in "$@"; do echo "${s}"; done | sort | uniq -d
   )
@@ -59,7 +61,8 @@ paths_common() (
     d="$(realpath "${1}")"
     find "${d}" \
     | while IFS= read line; do
-        [ "${line#${d}}" = "${line}" ] && echo "Something went wrong with '${line}'" >&2
+        [ -d "${line}" ] && line="${line%/}/"
+        [ "${line#${d}}" = "${line}" ] && echo "Unexpected root for '${line}'" >&2
         printf '+/%s\n' "$(echo "${line#${d}}" | sed 's/^\///')"
       done
   )
@@ -73,7 +76,17 @@ paths_common() (
     [ -z "${objects_common}" ] && objects_common="${objects}" && continue
     objects_common="$(dups "${objects_common}" "${objects}")"
   done
-  echo "${objects_common}"
+  
+  prev=
+  echo "${objects_common}" \
+  | tac \
+  | while IFS= read line; do
+      if [ -z "${prev}" ] || [ "${prev#${line}}" = "${prev}" ]; then
+        echo "${line}"
+      fi
+      prev="${line}"
+    done \
+  | tac
 )
 
 path_join() (
