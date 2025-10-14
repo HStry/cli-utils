@@ -32,7 +32,11 @@ EOF
 )"
 
 path_absolute() (
-  # TODO
+  if apath="$(realpath -s "${1}" 2> /dev/null)"; then
+    echo "${apath}"
+    exit 0
+  fi
+  # TODO: Create a manual abspath function for busybox.
 )
 
 path_normalize() (
