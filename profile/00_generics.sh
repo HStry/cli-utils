@@ -1,3 +1,24 @@
+isboolish() (
+  [ -n "${1}" ] || exit 1
+  echo "${1}" \
+  | tr '[:upper:]' '[:lower:]' \
+  | grep -q '^\(0\|-\?[1-9][0-9]*\|y\|yes\|n\|no\|true\|false\)$'
+)
+
+istrue() (
+  isboolish "${1}" || exit 255
+  echo "${1}" \
+  | tr '[:upper:]' '[:lower:]' \
+  | grep -q '^\(-\?[1-9][0-9]*\|y\|yes\|true\)$'
+)
+
+isfalse() (
+  isboolish "${1}" || exit 255
+  echo "${1}" \
+  | tr '[:upper:]' '[:lower:]' \
+  | grep -q '^\(0\|n\|no\|false\)$'
+)
+
 userapp_etc() (
   if [ -z "${1}" ]; then
     echo "Missing application name argument." >&2
@@ -14,4 +35,4 @@ userapp_etc() (
   exit 1
 )
 
-export -f userapp_etc
+export -f istrue isfalse userapp_etc
