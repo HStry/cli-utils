@@ -53,8 +53,8 @@ __ssh_agent_mgr__validate_ssh_agent_file() (
   pu="$(ps -q "${p}" -o uid=  | sed -e 's/^\s*//' -e 's/\s*$//')"
   pc="$(ps -q "${p}" -o comm= | sed -e 's/^\s*//' -e 's/\s*$//')"
   
-  [ "${pu}" -eq "$(id -u)" ] || exit 4
-  [ "${pc}" = 'ssh-agent' ] || exit 5
+  echo "${pu}" | grep -q '^\('"$(id -u)"'\)\?$' || exit 4
+  echo "${pc}" | grep -q '^\(ssh-agent\)\?$' || exit 5
   
   [ -n "${s}" ] || exit 6
   [ -e "${s}" ] || exit 7
@@ -75,3 +75,5 @@ ssh_agent_mgr() {
   __ssh_agent_mgr__set_ssh_agent_file || return $?
   __ssh_agent_mgr__load_agent || return $?
 }
+
+ssh_agent_mgr
