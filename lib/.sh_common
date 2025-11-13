@@ -1,0 +1,115 @@
+#!/usr/bin/env sh
+
+xdg_data_home() (
+  xdg_dir="${XDG_DATA_HOME:-${HOME}/.local/share}"
+  [ -d "${xdg_dir}" ] && echo "${xdg_dir}" && exit 0
+  for d in "${HOME}/.local/data" \
+           "${HOME}/.xdg/"{share,data} \
+           "${HOME}/."{share,data}; do
+    [ -d "${d}" ] && echo "${d}" && exit 0
+  done
+  echo "${xdg_dir}"
+  exit 1
+)
+xdg_config_home() (
+  xdg_dir="${XDG_CONFIG_HOME:-${HOME}/.config}"
+  [ -d "${xdg_dir}" ] && echo "${xdg_dir}" && exit 0
+  for d in "${HOME}/.local/"{config,etc} \
+           "${HOME}/.xdg/"{config,etc} \
+           "${HOME}/.etc"; do
+    [ -d "${d}" ] && echo "${d}" && exit 0
+  done
+  echo "${xdg_dir}"
+  exit 1
+)
+xdg_state_home() (
+  xdg_dir="${XDG_STATE_HOME:-${HOME}/.local/state}"
+  [ -d "${xdg_dir}" ] && echo "${xdg_dir}" && exit 0
+  for d in "${HOME}/.xdg/state" \
+           "${HOME}/.state"; do
+    [ -d "${d}" ] && echo "${d}" && exit 0
+  done
+  echo "${xdg_dir}"
+  exit 1
+)
+xdg_cache_home() (
+  xdg_dir="${XDG_CACHE_HOME:-${HOME}/.cache}"
+  [ -d "${xdg_dir}" ] && echo "${xdg_dir}" && exit 0
+  for d in "${HOME}/.local/cache" \
+           "${HOME}/.xdg/cache"; do
+    [ -d "${d}" ] && echo "${d}" && exit 0
+  done
+  echo "${xdg_dir}"
+  exit 1
+)
+
+xdg_binary_home() (
+  xdg_dir="${XDG_BINARY_HOME:-${HOME}/.local/bin}"
+  [ -d "${xdg_dir}" ] && echo "${xdg_dir}" && exit 0
+  for d in "${HOME}/.xdg/bin" \
+           "${HOME}/.bin"; do
+    [ -d "${d}" ] && echo "${d}" && exit 0
+  done
+  echo "${xdg_dir}"
+  exit 1
+)
+xdg_library_home() (
+  xdg_dir="${XDG_LIBRARY_HOME:-${HOME}/.local/lib}"
+  [ -d "${xdg_dir}" ] && echo "${xdg_dir}" && exit 0
+  for d in "${HOME}/.xdg/lib" \
+           "${HOME}/.lib"; do
+    [ -d "${d}" ] && echo "${d}" && exit 0
+  done
+  echo "${xdg_dir}"
+  exit 1
+)
+
+userapp_etc() (
+  [ $# -le 0 ] && echo "Missing 'app' argument." >&2 && exit 1
+  [ ${#1} -le 0 ] && echo "Empty 'app' argument." >&2 && exit 1
+  etc="$(xdg_config_home)"; etc_rc=$?
+  [ $etc_rc -eq 0 ] && [ -d "${etc}/${1}" ] && echo "${etc}/${1}" && exit 0
+  [ -d "${HOME}/.${1}" ] && echo "${HOME}/.${1}" && exit 0
+  [ $etc_rc -eq 0 ] && echo "${etc}/${1}" || echo "${HOME}/.${1}"
+  exit 1
+)
+userapp_conf() (
+  [ $# -le 0 ] && echo "Missing 'app' argument." >&2 && exit 1
+  [ ${#1} -le 0 ] && echo "Empty 'app' argument." >&2 && exit 1
+  for p in "$(xdg_config_home)/${1}"* \
+           "${HOME}/.${1}"*; do
+    [ -f "${p}" ] || continue
+    f="${p##*/}"
+    e="${f#.${1}}"; [ "${e}" = "${f}" ] && e="${f#${1}}"
+    echo "${e}" | grep -q '^\(.conf\|.cfg\|.config\|.json\|.ya\?ml\)\?$' && echo "${p}" && exit 0
+  done
+  exit 1
+)
+
+parse_args() {
+  local i a arg parse_arg=1 active_arg=''
+  for arg in "$@"; do
+    [ ${parse_arg} -gt 0 ] && [ "${arg}" = '--' ] && parse_arg=0 && continue
+    [ ${parse_arg} -le 0 ] && [ "${arg}" = '++' ] && parse_arg=1 && continue
+    [ ${parse_arg} -gt 0 ] && [ "${arg#--}" != "${arg}" ] \
+    && case "${arg#--}" in
+      'help') arg_help=1;;
+      *) echo "Unrecognized command-line option '${arg}'" >&2;
+         exit 1;;
+    esac
+    [ ${parse_arg} -gt 0 ] && [ "${arg#-}" != "${arg}" ] \
+    && for i in $(seq 2 ${#arg}); do
+      a="$(echo "${arg}" | head -c ${i} | tail -c 1)"
+      case "${a}" in
+        'h'|'?') arg_help=1;;
+        *) echo "Unrecognized command-line option '-${a}'" >&2;
+           exit 1;;
+      esac
+    done
+  done
+}
+
+_self="$(realpath -s "${0}" 2>/dev/null)"
+_path="${_self%/*}"
+_file="${_self##*/}"
+_name="${_file%.*}"
