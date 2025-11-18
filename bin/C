@@ -1,0 +1,78 @@
+#!/usr/bin/env sh
+# Simple colorize script.
+
+_color_code() (
+  code=''
+  bc=''
+  fc=''
+  wc=''
+  ic=''
+  uc=''
+  
+  if [ $# -ne 1 ]; then
+    echo "usage: _color_code STYLE, where STYLE matches '^([RGBCMYKW])?([rgbcmykw])?[Tt]?i?u?\$'" >&2
+    [ $# -lt 1 ] && exit 0 || exit 255
+  fi
+  
+  for i in $(seq 1 ${#1}); do
+    [ ${i} -gt 1 ] && code="${code};"
+    c="$(echo "${1}" | head -c ${i} | tail -c 1)"
+    if echo "${c}"   | grep -q '^[RGBCMYKW]$'; then
+      if [ -n "${bc}" ]; then
+        echo "Background already set to '${bc}', unable to parse '${c}'." >&2
+        exit 255
+      fi
+      bc="${c}"
+      case "${c}" in
+        'R') code="${code}41";; 'C') code="${code}46";;
+        'G') code="${code}42";; 'M') code="${code}45";;
+        'B') code="${code}44";; 'Y') code="${code}43";;
+        'W') code="${code}47";; 'K') code="${code}40";;
+      esac
+    elif echo "${c}" | grep -q '^[rgbcmykw]$'; then
+      if [ -n "${fc}" ]; then
+        echo "Foreground already set to '${fc}', unable to parse '${c}'." >&2
+        exit 255
+      fi
+      fc="${c}"
+      case "${c}" in
+        'r') code="${code}31";; 'c') code="${code}36";;
+        'g') code="${code}32";; 'm') code="${code}35";;
+        'b') code="${code}34";; 'y') code="${code}33";;
+        'w') code="${code}37";; 'k') code="${code}30";;
+      esac
+    elif echo "${c}" | grep -q '^[Tt]$'; then
+      if [ -n "${wc}" ]; then
+        echo "Weight already set to '${wc}', unable to parse '${c}'." >&2
+        exit 255
+      fi
+      wc="${c}"
+      case "${c}" in
+        'T') code="${code}1";;  't') code="${code}2";;
+      esac
+    elif [ "${c}" = 'i' ]; then
+      if [ -n "${ic}" ]; then
+        echo "Italic already set, unable to parse additional '${c}'." >&2
+        exit 255
+      fi
+      ic="${c}"
+      code="${code}3"
+    elif [ "${c}" = 'u' ]; then
+      if [ -n "${uc}" ]; then
+        echo "Underline already set, unable to parse additional '${c}'." >&2
+        exit 255
+      fi
+      uc="${c}"
+      code="${code}4"
+    else
+      echo "Unrecognized style character '${c}'" >&2
+      exit 255
+    fi
+  done
+  echo "${code}"
+  exit 0
+)
+
+c="$(_color_code "${1}")" && shift || exit $?
+s="$@"
+printf '\e[%sm%s\e[0m' "${c}" "${s}"
