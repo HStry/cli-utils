@@ -1,0 +1,66 @@
+#!/usr/bin/env sh
+
+help_msg="$(cat << EOF
+wscleaner - clean whitespace from text files.
+
+USAGE:
+  wscleaner [OPTIONS] [--] FILE [FILE...]
+
+OPTIONS:
+  -h, --help                    Show this help text
+  -t, --trailing                Remove trailing whitespace
+  -H, --head                    Remove empty lines from the top
+  -T, --tail                    Remove empty lines on the bottom
+  -c, --consecutive [N]         Remove consecutive empty lines over N(=1)
+  -W, --ws-not-empty            Whitespace (spaces, tabs) are content
+  -i, --inplace                 Edit file(s) in place
+  -o, --output FILE [FILE...]   Output to FILE [FILE...]
+EOF
+)"
+
+_get_str() (
+  [ $# -le 0 ] && echo "Missing required STR argument." >&2 && exit 255
+  [ $# -gt 1 ] && echo "Too many arguments provided." >&2 && exit 255
+  [ -f "${1}" ] && cat "${1}" || echo "${1}"
+)
+
+_line_is_empty() (
+  [ ${whitespace_is_empty:-1} -gt 0 ] && ptn='^\s*$' || ptn='^$'
+  echo "${1}" | grep -q "${ptn}"
+)
+
+strip_trailing_whitespace() (
+  s="$(_get_str "$@")" || exit $?
+  echo "${s}" | sed -e 's/\s*$//'
+)
+
+strip_leading_empty_lines() (
+  s="$(_get_str "$@")" || exit $?
+  head=1
+  echo "${s}" \
+  | while IFS= read line; do
+    if [ ${head} -gt 0 ]; then
+      _line_is_empty "${line}" && continue
+      head=0
+    fi
+    echo "${line}"
+  done
+)
+
+strip_trailing_empty_lines() (
+  s="$(_get_str "$@")" || exit $?
+  strip_leading_empty_lines "$(echo "${s}" | tac)" | tac
+)
+
+strip_repeating_empty_lines() (
+  s="$(_get_str "$@")" || exit $?
+  allowed_empty_line_count="${ALLOWED_EMPTY_LINE_COUNT:-1}"
+  empty_line_count=0
+  echo "${s}" \
+  | while IFS= read line; do
+    echo "${line}" | grep -q '^\s*$' \
+      && empty_line_count=$(( ${empty_line_count} + 1 )) \
+      || empty_line_count=0
+    [ ${empty_line_count} -le ${allowed_empty_line_count} ] && echo "${line}"
+  done
+)
