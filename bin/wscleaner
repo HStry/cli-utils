@@ -1,5 +1,10 @@
 #!/usr/bin/env sh
 
+# Yes, this all can be solved by a simple 'sed -z', were it not for
+# that fucking piece of shit busybox with its plethora of non-standard
+# command implementations, like sed, realpath, etc.
+# I mean, seriously, JFC, what the actual f*!
+
 help_msg="$(cat << EOF
 wscleaner - clean whitespace from text files.
 
@@ -17,6 +22,79 @@ OPTIONS:
   -o, --output FILE [FILE...]   Output to FILE [FILE...]
 EOF
 )"
+
+help=0
+trailing=0
+head=0
+tail=0
+whitespace_is_empty=1
+inplace=0
+consecutive=1
+output=''
+input=''
+
+parse_args=1
+active_arg=''
+
+for arg in "$@"; do
+  [ ${parse_args} -gt 0 ] && [ "${arg}" = '--' ] && active_arg='' && parse_args=0 && continue
+  [ ${parse_args} -le 0 ] && [ "${arg}" = '++' ] && parse_args=1 && continue
+  if [ ${parse_args} -gt 0 ] && [ "${arg#--}" != "${arg}" ]; then
+    case "${arg#--}" in
+      'help')         help=1;                 ; continue;;
+      'trailing')     trailing=1              ; continue;;
+      'head')         head=1                  ; continue;;
+      'tail')         tail=1                  ; continue;;
+      'ws-not-empty') whitespace_is_empty=0   ; continue;;
+      'inplace')      inplace=1               ; continue;;
+      'consecutive')  active_arg='consecutive'; continue;;
+      'output')       active_arg='output'     ; continue;;
+      *) echo "Command-line option '${arg}' not recognized." >&2;
+         exit 255;;
+    esac
+  elif [ ${parse_args} -gt 0 ] && [ "${arg#-}" != "${arg}" ]; then
+    for i in $(seq 2 ${#arg}); do
+      a="$(echo "${arg}" | head -c ${i} | tail -c 1)"
+      case "${arg#--}" in
+        'h'|'?') help=1;                 ; continue;;
+        't')     trailing=1              ; continue;;
+        'H')     head=1                  ; continue;;
+        'T')     tail=1                  ; continue;;
+        'W')     whitespace_is_empty=0   ; continue;;
+        'i')     inplace=1               ; continue;;
+        'c')     active_arg='consecutive'; continue;;
+        'o')     active_arg='output'     ; continue;;
+        *) echo "Command-line option '-${a}' not recognized." >&2;
+           exit 255;;
+      esac
+    done
+  fi
+  if [ "${active_arg}" = 'consecutive' ]; then
+    if echo "${arg}" | grep -q '^-[0-9]\+$'; then
+      echo "Positive numeric value required for 'consecutive' option." >&2
+      exit 255
+    elif ! echo "${arg}" | grep -q '^\(0\|[1-9][0-9]*\)$'; then
+      echo "Numeric value required for 'consecutive' option." >&2
+      exit 255
+    fi
+    consecutive=${arg}
+    active_arg=''
+  elif [ "${active_arg}" = 'output' ]; then
+    output="$(echo "${output}"; echo "${arg}")"
+  elif [ "${active_arg}" = '' ]; then
+    input="$(echo "${input}"; echo "${arg}")"
+  else
+    echo "Coding error; unhandled active arg case '${active_arg}'" >&2
+    exit 255
+  fi
+done
+
+[ ${help} -gt 0 ] && echo "${help_msg}" >&2 && exit 0
+if [ ${inplace} -gt 0 ] && [ ${#output} -gt 0 ]; then
+  echo "Cannot provide 'inplace' option together with 'output'." >&2
+  exit 255
+elif [ ${#output} -gt 0 ] && [ $(echo "${input}" | wc -l) -ne $(echo "${output}" | wc -l) ]; then
+
 
 _get_str() (
   [ $# -le 0 ] && echo "Missing required STR argument." >&2 && exit 255
