@@ -4,86 +4,335 @@
 # Copyright (c) 2025 - Hans Strijker
 # Licensed under LGPL-3.0
 
+
 ################################################################################
 #                                                                              #
-# Clear parameters to use, and parse commandline arguments                     #
+# Variable defaults, and constants                                             #
 #                                                                              #
 ################################################################################
 
-help=0
+cl_args=( "$@" )
 
-parse_args=1
-active_arg=''
+arg_help=0
+arg_software=0
+arg_firmware=0
+arg_two_step_firmware=0
+arg_host_lookup=1
+arg_hosts=()
 
-for arg in "$@"; do
-  grep -q -- '^\(--help\|-[h?]\)$' <<< "${arg}" && help=1
-done
+app_name='mikrotik-update'
+app_description="${app_name} - "
+app_description+="Update your Mikrotik RouterOS devices from the command-line."
 
-if (( help )); then
-cat << EOF >&2
-mikrotik-update [SSH-OPTIONS] HOST
+ros_cmds_versions=( '/system/package/update/check-for-updates' 
+                    '/system/routerboard/print' )
+ros_cmds_software=( '/system/package/update/download'
+                    '/system/package/update/install'
+                    '/system/reboot' )
+ros_cmds_firmware=( '/system/routerboard/upgrade'
+                    '/system/reboot' )
+
+msg_versions_start="Retrieving version status for host '%s'..."
+msg_versions_parse="Parsing versions for host '%s'."
+msg_software_start="Updating software for host '%s'..."
+msg_software_reboot="Software for '%s' updated - waiting for reboot."
+msg_software_done="Software for host '%s' updated from %s to %s."
+msg_firmware_start="Updating firmware for host '%s'..."
+msg_firmware_reboot="Firmware for '%s' updated - waiting for reboot."
+msg_firmware_done="Firmware for host '%s' updated from %s to %s."
+
+msg_err_not_unavailable="Timed out waiting for host '%s' to become unavailable."
+msg_err_not_available="Timed out waiting for host '%s' to become available again."
+msg_err_no_versions="Unable to retrieve version information for host '%s'."
+
+msg_hint="$(cat << EOF
+${app_description}
+  - run '${app_name} --help' for more information.
 EOF
-exit
-fi
+)"
+
+msg_help="$(cat << EOF
+${app_description}
+
+USAGE:
+  ${app_name} [OPTIONS] HOST [HOST...]
+  
+  HOST      The hostname or IP address of a Mikrotik network device. The host
+            must be configured in your ssh config, usually located at
+            \${HOME}/.ssh/config, with 'User' and 'IdentityFile' properties set.
+            To prevent having to enter the key's password repeatedly, it's
+            adviced to use 'ssh-agent', or a similar solution, to manage the
+            decrypted keys.
+
+OPTIONS:
+  -h, --help               Show this help message.
+  -S, --update-software    Update the network devices's software.
+  -F, --update-firmware    Update the network devices's firmware.
+  -2, --two-step-firmware  Update firmware first to locally available version,
+                           before updating the software.
+  -u, --update             Update both software and firmware.
+  -L, --skip-host-lookup   Do not use the 'host' command to check if a hostname
+                           or address is valid.
+EOF
+)"
+
 
 ################################################################################
 #                                                                              #
-# declare functions                                                            #
+# Command-line parsing                                                         #
 #                                                                              #
 ################################################################################
 
-_join_cmds() {
-  local cmd first=1
-  for cmd in "$@"; do
-    (( first )) && first=0 || echo -n ' '
-    echo -n "${cmd};"
+parse_args() {
+  local i a arg parse_args=1 active_arg=''
+  for arg in "$@"; do
+    ((   parse_args )) && [[ "${arg}" == '--' ]] && parse_args=0 && continue
+    (( ! parse_args )) && [[ "${arg}" == '++' ]] && parse_args=1 && continue
+    if (( parse_args )) && [[ "${arg:0:2}" == '--' ]]; then
+      case "${arg:2}" in
+        'help')              arg_help=1;;
+        'update-software')   arg_software=1;;
+        'update-firmware')   arg_firmware=1;;
+        'two-step-firmware') arg_two_step_firmware=1;;
+        'update')            arg_software=1; arg_firmware=1;;
+        'skip-host-lookup')  arg_host_lookup=0;;
+        *) echo "Command-line argument '${arg}' not recognized." >&2;
+           return 1;;
+      esac
+    elif (( parse_args )) && [[ "${arg:0:1}" == '-' ]]; then
+      for (( i=1; i<${#arg}; i++ )); do
+        a="${arg:i:1}"
+        case "${a}" in
+          'h'|'?')  arg_help=1;;
+          'S')      arg_software=1;;
+          'F')      arg_firmware=1;;
+          '2')      arg_two_step_firmware=1;;
+          'u')      arg_software=1; arg_firmware=1;;
+          'H')      arg_host_lookup=0;;
+          *) echo "Command-line argument '-${a}' not recognized." >&2;
+             return 1;;
+        esac
+      done
+    else
+      arg_hosts+=( "${arg}" )
+    fi
+  done
+  if (( ! $# )); then
+    echo "${msg_hint}" >&2
+    exit 0
+  elif (( arg_help )); then
+    echo "${msg_help}" >&2
+    exit 0
+  elif (( ! ${#arg_hosts[@]} )); then
+    echo "Missing 'HOST' argument(s)." >&2
+    exit 1
+  fi
+}
+
+
+################################################################################
+#                                                                              #
+# Generic functions                                                            #
+#                                                                              #
+################################################################################
+
+timestamp() {
+  date -u +%s
+}
+
+lstrip() {
+  local s="${1}" c="${2:-[:space:]}"
+  echo -en "${s#${s%%[!${c}]*}}"
+}
+
+rstrip() {
+  local s="${1}" c="${2:-[:space:]}"
+  echo -en "${s%${s##*[!${c}]}}"
+}
+
+strip() {
+  local s="${1}" c="${2:-[:space:]}"
+  s="${s%${s##*[!${c}]}}"
+  echo -en "${s#${s%%[!${c}]*}}"
+}
+
+
+################################################################################
+#                                                                              #
+# Connection utilities                                                         #
+#                                                                              #
+################################################################################
+
+host_lookup() {
+  # Test if a host exists. Might cause a delay polling the DNS server(s).
+  local host="${1}"
+  host -W1 -R1 "${host}" > /dev/null 2>&1
+}
+
+host_available() {
+  # Pings host (standard ICMP ECHO_REQUEST) to see if it's there.
+  local host="${1}"
+  ping -c 1 -W 1 "${host}" > /dev/null 2>&1
+}
+
+wait_for_host_unavailable() {
+  # repeatedly calls host with a (default) 1 second interval until it stops
+  # responding. Times out after (default) 5 minutes.
+  local host="${1}"
+  local interval="${WAIT_FOR_HOST_UNAVAILABLE_INTERVAL:-1}"
+  local timeout="${WAIT_FOR_HOST_UNAVAILABLE_TIMEOUT:-300}"
+  local notafter=$(( $(timestamp) + timeout - interval ))
+  
+  while host_available "${host}"; do
+    (( $(timestamp) <= notafter)) && sleep "${interval}" && continue
+    return 1
   done
 }
 
-update_check() {
-  local status cmd
-  cmd="$(_join_cmds '/system/package/update/check-for-updates' \
-                    '/system/routerboard/print' )"
-  if ! status="$(ssh "$@" "${cmd}" 2> /dev/null)"; then
-    echo "Could not reach host, or host is not a Mikrotik device" >&2
+wait_for_host() {
+  # repeatedly calls host with a (default) 5 second interval until it responds.
+  # Times out after (default) 5 minutes.
+  local host="${1}"
+  local interval="${WAIT_FOR_HOST_INTERVAL:-5}"
+  local timeout="${WAIT_FOR_HOST_TIMEOUT:-300}"
+  local notafter=$(( $(timestamp) + timeout - interval ))
+  
+  while ! host_available "${host}"; do
+    (( $(timestamp) <= notafter)) && sleep "${interval}" && continue
+    return 1
+  done
+}
+
+ssh_run() {
+  local host="${1}"; shift
+  local i=0 cmds='' cmd=''
+  for cmd in "$@"; do
+    (( i )) && cmds+='; ' || (( i++ ))
+    cmds+="${cmd}"
+  done
+  ssh "${host}" "${cmds}"
+}
+
+
+################################################################################
+#                                                                              #
+# Functional code                                                              #
+#                                                                              #
+################################################################################
+
+_parse_version() {
+  local line="$(grep '^\s*'"${1}"'\s*:' <<< "${2}" | tail -n 1)"
+  strip "${line#*:}"
+}
+
+_software_updatable() {
+  ! [[ "${software_latest}" == "${software_installed}" ]]
+}
+
+_firmware_updatable() {
+  ! [[ "${firmware_latest}" == "${firmware_installed}" ]]
+}
+
+retrieve_versions() {
+  local host="${1}" output='' tuptuo=''
+  printf '\e[K'"${msg_versions_start}"'\r' "${host}" >&2
+  if ! output="$(ssh_run "${host}" "${ros_cmds_versions[@]}" 2>&1)"; then
+    printf '\e[K'"${msg_err_no_versions}"'\r' "${host}" >&2
+    echo "${output}" >&2
     return 1
   fi
-  local software_current software_latest
-  local firmware_current firmware_latest
-  software_current="$(grep -m1 '^\s*installed-version' <<< "${status}" \
-                      | sed -e 's/^[^:]*:\s*//' -e 's/\s*$//' )"
-  software_latest="$(grep -m1 '^\s*latest-version' <<< "${status}" \
-                     | sed -e 's/^[^:]*:\s*//' -e 's/\s*$//' )"
-  firmware_current="$(grep -m1 '^\s*current-firmware' <<< "${status}" \
-                      | sed -e 's/^[^:]*:\s*//' -e 's/\s*$//' )"
-  firmware_latest="$(grep -m1 '^\s*upgrade-firmware' <<< "${status}" \
-                     | sed -e 's/^[^:]*:\s*//' -e 's/\s*$//' )"
-  local u=0 n_ n=0
-  for n_ in "${#software_current}" "${#software_latest}" \
-            "${#firmware_current}" "${#firmware_latest}"; do
-    (( n_ > n )) && n=${n_}
-  done
   
-  printf "software: %${n}s" "${software_current}"
-  if [[ "${software_current}" != "${software_latest}" ]]; then
-    printf ' -> '"%${n}s\n" "${software_latest}" && u=1
-  else
-    printf '\n'
+  printf '\e[K'"${msg_versions_parse}"'\r' "${host}" >&2
+  software_installed="$(_parse_version "installed-version" "${output}")"
+  software_latest="$(_parse_version "latest-version" "${output}")"
+  firmware_installed="$(_parse_version "current-firmware" "${output}")"
+  firmware_latest="$(_parse_version "upgrade-firmware" "${output}")"
+  printf '\e[K' >&2
+}
+
+prettify_versions() {
+  local software_updatable firmware_updatable
+  _software_updatable && software_updatable=true || software_updatable=false
+  _firmware_updatable && firmware_updatable=true || firmware_updatable=false
+  yq '.' << EOF
+- host: "${host}"
+  software:
+    latest: "${software_latest}"
+    installed: "${software_installed}"
+    updatable: ${software_updatable}
+  firmware:
+    latest: "${firmware_latest}"
+    installed: "${firmware_installed}"
+    updatable: ${firmware_updatable}
+EOF
+}
+
+update_software() {
+  local host="${1}" output=''
+  printf '\e[K'"${msg_software_start}"'\r' "${host}" >&2
+  output="$(ssh_run "${host}" "${ros_cmds_software[@]}" 2>&1)"
+  printf '\e[K'"${msg_software_reboot}"'\r' "${host}" >&2
+  if ! wait_for_host_unavailable "${host}"; then
+    printf '\e[K'"${msg_err_not_unavailable}"'\n' "${host}" >&2
+    echo "${output}" >&2
+    return 1
+  elif ! wait_for_host "${host}"; then
+    printf '\e[K'"${msg_err_not_available}"'\n' "${host}" >&2
+    echo "${output}" >&2
+    return 1
   fi
-  
-  printf "firmware: %${n}s" "${firmware_current}"
-  if [[ "${firmware_current}" != "${firmware_latest}" ]]; then
-    printf ' -> '"%${n}s\n" "${firmware_latest}" && u=1
-  else
-    printf '\n'
+  printf '\e[K'"${msg_software_done}"'\n' \
+      "${host}" "${software_installed}" "${software_latest}" >&2
+}
+
+update_firmware() {
+  local host="${1}" output=''
+  printf '\e[K'"${msg_firmware_start}"'\r' "${host}" >&2
+  output="$(ssh_run "${host}" "${ros_cmds_firmware[@]}" 2>&1)"
+  printf '\e[K'"${msg_firmware_reboot}"'\r' "${host}" >&2
+  if ! wait_for_host_unavailable "${host}"; then
+    printf '\e[K'"${msg_err_not_unavailable}"'\n' "${host}" >&2
+    echo "${output}" >&2
+    return 1
+  elif ! wait_for_host "${host}"; then
+    printf '\e[K'"${msg_err_not_available}"'\n' "${host}" >&2
+    echo "${output}" >&2
+    return 1
   fi
-  
-  (( u )) && return 0 || return 1
+  printf '\e[K'"${msg_firmware_done}"'\n' \
+      "${host}" "${firmware_installed}" "${firmware_latest}" >&2
 }
 
 
 ################################################################################
 #                                                                              #
-# Do the thing!                                                                #
+# Exit through the giftshop...                                                 #
 #                                                                              #
 ################################################################################
+
+main() {
+  local host='' vers=''
+  for host in "${arg_hosts[@]}"; do
+    if (( arg_host_lookup )) && ! host_lookup "${host}"; then
+      echo "Could not lookup host '${host}' - skipping." >&2
+      continue
+    fi
+    retrieve_versions "${host}"
+    
+    if (( arg_firmware && arg_two_step_firmware )) && _firmware_updatable; then
+      update_firmware "${host}" || continue
+      retrieve_versions "${host}"
+    fi
+    if (( arg_software )) && _software_updatable; then
+      update_software "${host}" || continue
+      retrieve_versions "${host}"
+    fi
+    if (( arg_firmware )) && _firmware_updatable; then
+      update_firmware "${host}" || continue
+      retrieve_versions "${host}"
+    fi
+    prettify_versions
+  done
+}
+
+parse_args "${cl_args[@]}" && main
